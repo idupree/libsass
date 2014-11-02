@@ -1,9 +1,12 @@
 ACLOCAL_AMFLAGS = -I m4
-AM_CXXFLAGS = -std=c++11 -Wall -fPIC
+AM_CFLAGS = -Wall -fPIC
+AM_CXXFLAGS = -Wall -fPIC
 
 if ENABLE_COVERAGE
+  AM_CFLAGS += -O0 --coverage
   AM_CXXFLAGS += -O0 --coverage
 else
+  AM_CFLAGS += -O2
   AM_CXXFLAGS += -O2
 endif
 
@@ -11,7 +14,9 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = support/libsass.pc
 
 lib_LTLIBRARIES = libsass.la
+
 libsass_la_SOURCES = \
+	cencode.c \
 	ast.cpp \
 	base64vlq.cpp \
 	bind.cpp \
@@ -42,10 +47,14 @@ libsass_la_SOURCES = \
 	to_string.cpp \
 	units.cpp \
 	utf8_string.cpp \
-	cencode.c \
 	util.cpp
 
+libsass_la_CXXFLAGS = $(AM_CXXFLAGS) -std=c++0x
 libsass_la_LDFLAGS = -no-undefined -version-info 0:0:0
+
+if ENABLE_COVERAGE
+libsass_la_LDFLAGS += -lgcov
+endif
 
 include_HEADERS = sass_interface.h sass.h
 
@@ -57,8 +66,7 @@ sass_tester_SOURCES = $(SASS_SASSC_PATH)/sassc.c
 sass_tester_LDADD = libsass.la
 sass_tester_LDFLAGS = -no-install
 if ENABLE_COVERAGE
-sass_tester_LDFLAGS += -static
-nodist_EXTRA_sass_tester_SOURCES = non-existent-file-to-force-CXX-linking.cxx
+sass_tester_LDFLAGS = -lgcov
 endif
 
 TESTS = \
@@ -77,16 +85,16 @@ SASS_SPEC_PATH ?= sass-spec
 SASSC_BIN = $(SASS_SASSC_PATH)/bin/sassc
 RUBY_BIN = ruby
 
-$(SASSC_BIN): libsass.la
+sassc: libsass.la
 	cd $(SASS_SASSC_PATH) && $(MAKE)
 
-test: $(SASSC_BIN) libsass.la
+test: sassc libsass.la
 	$(RUBY_BIN) $(SASS_SPEC_PATH)/sass-spec.rb -c $(SASSC_BIN) -s $(LOG_FLAGS) $(SASS_SPEC_PATH)
 
-test_build: $(SASSC_BIN) libsass.la
+test_build: sassc libsass.la
 	$(RUBY_BIN) $(SASS_SPEC_PATH)/sass-spec.rb -c $(SASSC_BIN) -s --ignore-todo $(LOG_FLAGS) $(SASS_SPEC_PATH)
 
-test_issues: $(SASSC_BIN) libsass.la
+test_issues: sassc libsass.la
 	$(RUBY_BIN) $(SASS_SPEC_PATH)/sass-spec.rb -c $(SASSC_BIN) $(LOG_FLAGS) $(SASS_SPEC_PATH)/spec/issues
 
 endif

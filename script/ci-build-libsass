@@ -12,26 +12,35 @@ if [ "x$TRAVIS_BUILD_DIR" == "x" ]; then export TRAVIS_BUILD_DIR=$(pwd)/build; f
 if [ "x$SASS_SASSC_PATH" == "x" ]; then export SASS_SASSC_PATH=$(pwd)/sassc; fi
 if [ "x$SASS_SPEC_PATH" == "x" ]; then export SASS_SPEC_PATH=$(pwd)/sass-spec; fi
 
-if [ "x$CXX" == "xclang++" ]; then
-  COVERAGE="--enable-coverage"
+if [ "x$COVERAGE" == "xyes" ]; then
+  COVERAGE_OPT="--enable-coverage"
   export EXTRA_CFLAGS="-O0 --coverage"
+  export EXTRA_CXXFLAGS="-O0 --coverage"
   export EXTRA_LDFLAGS="-O0 --coverage"
 else
-  COVERAGE="--enable-coverage"
-  export EXTRA_CFLAGS="-O0 --coverage"
-  export EXTRA_LDFLAGS="-O0 --coverage"
+  COVERAGE_OPT="--disable-coverage"
 fi
 
-export MAKE_OPTS="-j5 V=1"
+if [ "x$BUILD" == "xstatic" ]; then
+  SHARED_OPT="--disable-shared --enable-static"
+  MAKE_TARGET="static"
+else
+  SHARED_OPT="--enable-shared --disable-static"
+  MAKE_TARGET="shared"
+fi
+
+MAKE_OPTS="$MAKE_OPTS -j3 V=1"
 
 if [ "x$AUTOTOOLS" == "xyes" ]; then
 
   echo -en 'travis_fold:start:configure\r'
-  autoreconf -i
-  ./configure --enable-tests $COVERAGE \
+  autoreconf --force --install
+  ./configure --enable-tests $COVERAGE_OPT \
+    --disable-silent-rules \
     --with-sassc-dir=$SASS_SASSC_PATH \
     --with-sass-spec-dir=$SASS_SPEC_PATH \
-    --prefix=$TRAVIS_BUILD_DIR
+    --prefix=$TRAVIS_BUILD_DIR \
+    ${SHARED_OPT}
   echo -en 'travis_fold:end:configure\r'
 
   make $MAKE_OPTS install
@@ -39,12 +48,26 @@ if [ "x$AUTOTOOLS" == "xyes" ]; then
   # sassc expects file to be in our root
   echo "moving libsass.a in-place for sassc"
   echo cp $TRAVIS_BUILD_DIR/lib/libsass.a $(pwd)
-  cp $TRAVIS_BUILD_DIR/lib/libsass.a $(pwd)
+  cp $TRAVIS_BUILD_DIR/lib/libsass.* $(pwd)
 
 else
 
-  make $MAKE_OPTS $SASS_SASSC_PATH/bin/sassc
+  make clean
+
+  if [ "x$BUILD" == "xstatic" ]; then
+    make $MAKE_OPTS static
+  else
+    make $MAKE_OPTS shared
+  fi
+
+  # sassc has static as dep
+  make $MAKE_OPTS sassc
 
 fi
+
+echo successfully compiled libsass
+echo AUTOTOOLS=$AUTOTOOLS COVERAGE=$COVERAGE BUILD=$BUILD
+
+ls -la libsass.*
 
 script/spec

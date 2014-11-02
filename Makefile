@@ -1,5 +1,7 @@
+CC       ?= cc
 CXX      ?= g++
-CXXFLAGS = -std=c++11 -Wall -fPIC -O2 $(EXTRA_CFLAGS)
+CFLAGS   = -Wall -fPIC -O2 $(EXTRA_CFLAGS)
+CXXFLAGS = -std=c++0x -Wall -fPIC -O2 $(EXTRA_CXXFLAGS)
 LDFLAGS  = -fPIC $(EXTRA_LDFLAGS)
 
 ifneq (,$(findstring /cygdrive/,$(PATH)))
@@ -13,6 +15,7 @@ endif
 endif
 
 ifeq ($(UNAME),Darwin)
+	CFLAGS += -stdlib=libc++
 	CXXFLAGS += -stdlib=libc++
 endif
 
@@ -56,33 +59,40 @@ SOURCES = \
 	to_string.cpp \
 	units.cpp \
 	utf8_string.cpp \
-	cencode.c \
 	util.cpp
 
-OBJECTS = $(SOURCES:.cpp=.o) $(SOURCES:.c=.o)
+CSOURCES = cencode.c
+
+OBJECTS = $(SOURCES:.cpp=.o)
+COBJECTS = $(CSOURCES:.c=.o)
 
 DEBUG_LVL ?= NONE
 
 all: static
 
 debug: LDFLAGS := -g
+debug: CFLAGS := -g -DDEBUG -DDEBUG_LVL="$(DEBUG_LVL)" $(filter-out -O2,$(CFLAGS))
 debug: CXXFLAGS := -g -DDEBUG -DDEBUG_LVL="$(DEBUG_LVL)" $(filter-out -O2,$(CXXFLAGS))
 debug: static
 
 debug-shared: LDFLAGS := -g
+debug-shared: CFLAGS := -g -DDEBUG -DDEBUG_LVL="$(DEBUG_LVL)" $(filter-out -O2,$(CFLAGS))
 debug-shared: CXXFLAGS := -g -DDEBUG -DDEBUG_LVL="$(DEBUG_LVL)" $(filter-out -O2,$(CXXFLAGS))
 debug-shared: shared
 
 static: libsass.a
 shared: libsass.so
 
-libsass.a: $(OBJECTS)
-	$(AR) rvs $@ $(OBJECTS)
+libsass.a: $(COBJECTS) $(OBJECTS)
+	$(AR) rvs $@ $(COBJECTS) $(OBJECTS)
 
-libsass.so: $(OBJECTS)
-	$(CXX) -shared $(LDFLAGS) -o $@ $(OBJECTS)
+libsass.so: $(COBJECTS) $(OBJECTS)
+	$(CXX) -shared $(LDFLAGS) -o $@ $(COBJECTS) $(OBJECTS)
 
-%.o: %.cpp %.c
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 %: %.o libsass.a
@@ -96,7 +106,7 @@ install-shared: libsass.so
 	mkdir -p $(DESTDIR)$(LIBDIR)/
 	install -pm0755 $< $(DESTDIR)$(LIBDIR)/$<
 
-$(SASSC_BIN): libsass.a
+sassc: libsass.a
 	cd $(SASS_SASSC_PATH) && $(MAKE)
 
 test: $(SASSC_BIN) libsass.a
@@ -109,7 +119,7 @@ test_issues: $(SASSC_BIN) libsass.a
 	$(RUBY_BIN) $(SASS_SPEC_PATH)/sass-spec.rb -c $(SASSC_BIN) $(LOG_FLAGS) $(SASS_SPEC_PATH)/spec/issues
 
 clean:
-	rm -f $(OBJECTS) *.a *.so
+	rm -f $(COBJECTS) $(OBJECTS) *.a *.so
 
 
 .PHONY: all debug debug-shared static shared bin install install-shared clean
